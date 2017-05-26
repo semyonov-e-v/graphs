@@ -6,6 +6,14 @@
 #include <string>
 #include <iterator>
 #include <sstream>
+#include <cstdio>
+#include <limits>
+#include <algorithm>
+
+#include "DSU.h"
+
+typedef std::tuple<int,int,int> EdgeTuple;
+typedef std::vector<EdgeTuple> SpainingTree;
 
 std::vector<int> Split(const std::string& subject)
 {
@@ -13,6 +21,19 @@ std::vector<int> Split(const std::string& subject)
     using StrIt = std::istream_iterator<int>;
     std::vector<int> container{StrIt{ss}, StrIt{}};
     return container;
+}
+
+int minKey (const std::vector<int> &key,
+            const std::vector<bool> &mstSet)
+{
+    int min = std::numeric_limits<int>::max(), min_index;
+    int Size = key.size();
+
+    for (int v = 0; v < Size; v++)
+        if (mstSet[v] == false && key[v] < min)
+            min = key[v], min_index = v;
+
+    return min_index;
 }
 
 class View
@@ -24,9 +45,14 @@ public:
     virtual void removeEdge(int from,int to) =0;
     virtual int changeEdge(int from,int to,int newWeight)=0;
     virtual void Write(std::ostream &out) =0;
+    virtual std::pair<SpainingTree,int> getSpainingTreePrima() =0;
+    virtual std::pair<SpainingTree,int> getSpainingTreeKruscal() =0;
+    virtual std::pair<SpainingTree,int> getSpainingTreeBoruvka() =0;
+
     virtual ~View () {}
 
     bool is_weighted;
+    bool is_directed;
     char type;
 };
 
@@ -43,7 +69,9 @@ public:
     {
         std::size_t Size;
         in>>Size;
+        in>>is_directed;
         in>>is_weighted;
+
         data = Matrix(Size,IntVec(Size,0));
         for(std::size_t i = 0; i<Size; i++)
             for(std::size_t j = 0; j<Size; j++)
@@ -53,6 +81,7 @@ public:
     {
         std::size_t Size = data.size();
         out<<Size<<' ';
+        out<<is_directed<<'\n';
         out<<is_weighted<<'\n';
         for(std::size_t i = 0; i<Size; i++)
         {
@@ -79,9 +108,142 @@ public:
         data[to][from] = newWeight;
         return oldWeight;
     }
-    virtual ~AdjMatrix () {}
+    virtual std::pair<SpainingTree,int> getSpainingTreePrima()
+    {
+		int NTops = data.size();
+        std::vector<int> parent(NTops);
+        std::vector<int> key(NTops,std::numeric_limits<int>::max());
+        std::vector<bool> mstSet(NTops,false);
 
-    Matrix data;
+        key[0] = 0;
+        parent[0] = -1;
+
+        for (int count = 0; count < NTops-1; count++)
+        {
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            for (int v = 0; v<NTops; v++)
+            {
+                if (data[u][v] && mstSet[v] == false && data[u][v] < key[v])
+                {
+                    parent[v] = u;
+                    key[v] = data[u][v];
+                }
+            }
+        }
+        SpainingTree R(NTops-1);
+        for (int i = 1; i < NTops; i++)
+        {
+		    R[i-1] = std::make_tuple(parent[i], i, data[i][parent[i]]);
+		}
+		return std::make_pair(R,NTops);
+    }
+
+virtual std::pair<SpainingTree,int> getSpainingTreeKruscal()
+{
+        SpainingTree SortedEdges;
+        int V = data.size();
+        for(int i = 0; i<V; i++)
+        {
+            for(int j = 0; j<V; j++)
+            {
+                auto el = data[i][j];
+                if(el)
+                    SortedEdges.push_back(std::make_tuple(i,j,el));
+            }
+        }
+
+        SpainingTree result(V-1);
+        std::sort(SortedEdges.begin(),SortedEdges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+        DSU subsets = DSU(V);
+
+        std::size_t j = 0;
+        for(const auto &el : SortedEdges)
+        {
+            int x = subsets.find(std::get<0>(el));
+            int y = subsets.find(std::get<1>(el));
+
+            if (x != y)
+            {
+                result[j++]=el;
+                subsets.unite(x, y);
+            }
+        }
+
+        return std::make_pair(result,V);
+}
+virtual std::pair<SpainingTree,int> getSpainingTreeBoruvka()
+{
+	    SpainingTree edges;
+        int V = data.size();
+        for(int i = 0; i<V; i++)
+        {
+            for(int j = 0; j<V; j++)
+            {
+                auto el = data[i][j];
+                if(el)
+                    edges.push_back(std::make_tuple(i,j,el));
+            }
+        }
+
+        SpainingTree result(V-1);
+        std::sort(edges.begin(),edges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+	    DSU subsets = DSU(V);
+
+        int numTrees = V;
+        auto index = 0;
+        int E = edges.size();
+        for (int t = 1; t < V && numTrees > 1; t = t + t)
+        {
+            std::vector<int> cheapest(V,-1);
+            for (int i=0; i<E; i++)
+            {
+                int set1 = subsets.find(std::get<0>(edges[i]));
+                int set2 = subsets.find(std::get<1>(edges[i]));
+                if (set1 == set2)
+                    continue;
+
+                else
+                {
+                    if (cheapest[set1] == -1 ||
+                            std::get<2>(edges[cheapest[set1]]) > std::get<2>(edges[i]))
+                        cheapest[set1] = i;
+
+                    if (cheapest[set2] == -1 ||
+                            std::get<2>(edges[cheapest[set2]]) > std::get<2>(edges[i]))
+                        cheapest[set2] = i;
+                }
+            }
+            for (int i=0; i<V; i++)
+            {
+                // Check if cheapest for current set exists
+                if (cheapest[i] != -1)
+                {
+                    int set1 = subsets.find(std::get<0>(edges[cheapest[i]]));
+                    int set2 = subsets.find(std::get<1>(edges[cheapest[i]]));
+                    if (set1 == set2)
+                        continue;
+                    //MSTweight += std::get<2>(edge[cheapest[i]]);
+                    result[index++] = edges[cheapest[i]];
+                    subsets.unite(set1,set2);
+                    numTrees--;
+                }
+            }
+
+        }
+        return std::make_pair(result,V);
+}
+virtual ~AdjMatrix () {}
+
+Matrix data;
 };
 typedef std::unordered_map<int,int> List;
 typedef std::vector<List> Lists;
@@ -153,10 +315,133 @@ public:
             data[to][from] = newWeight;
         return oldWeight;
     }
+    std::pair<SpainingTree,int> getSpainingTreePrima()
+    {
+        int V = data.size();
+
+        std::vector<int> parent(V);
+        std::vector<int> key(V,std::numeric_limits<int>::max());
+        std::vector<bool> mstSet(V,false);
+
+        key[0] = 0;
+        parent[0] = -1;
+
+        for (int count = 0; count < V-1; count++)
+        {
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            for (const auto &el : data[u])
+            {
+                auto v = el.first;
+                auto w = el.second;
+                if (mstSet[v] == false && w <  key[v])
+                    parent[v]  = u, key[v] = w;
+            }
+        }
+        SpainingTree R(V-1);
+        for (int i = 1; i < V; i++)
+        {
+		    R[i-1] = std::make_tuple(parent[i], (int)i, data[i][parent[i]]);
+		}
+		return std::make_pair(R,V);
+    }
+    std::pair<SpainingTree,int> getSpainingTreeKruscal()
+    {
+	    SpainingTree SortedEdges;
+        int V = data.size();
+        for(int i = 0; i<V; i++)
+        {
+            for(const auto &el : data[i])
+                SortedEdges.push_back(std::make_tuple(i,el.first,el.second));
+		}
+
+        SpainingTree result(V-1);
+        std::sort(SortedEdges.begin(),SortedEdges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+        DSU subsets = DSU(V);
+
+        std::size_t j = 0;
+        for(const auto &el : SortedEdges)
+        {
+            int x = subsets.find(std::get<0>(el));
+            int y = subsets.find(std::get<1>(el));
+
+            if (x != y)
+            {
+                result[j++]=el;
+                subsets.unite(x, y);
+            }
+        }
+
+        return std::make_pair(result,V);
+	}
+    std::pair<SpainingTree,int> getSpainingTreeBoruvka()
+    {
+	    SpainingTree edges;
+        int V = data.size();
+        for(int i = 0; i<V; i++)
+        {
+            for(const auto &el : data[i])
+                edges.push_back(std::make_tuple(i,el.first,el.second));
+		}
+
+        SpainingTree result(V-1);
+        std::sort(edges.begin(),edges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+	    DSU subsets = DSU(V);
+
+        int numTrees = V;
+        auto index = 0;
+        int E = edges.size();
+        for (int t = 1; t < V && numTrees > 1; t = t + t)
+        {
+            std::vector<int> cheapest(V,-1);
+            for (int i=0; i<E; i++)
+            {
+                int set1 = subsets.find(std::get<0>(edges[i]));
+                int set2 = subsets.find(std::get<1>(edges[i]));
+                if (set1 == set2)
+                    continue;
+
+                else
+                {
+                    if (cheapest[set1] == -1 ||
+                            std::get<2>(edges[cheapest[set1]]) > std::get<2>(edges[i]))
+                        cheapest[set1] = i;
+
+                    if (cheapest[set2] == -1 ||
+                            std::get<2>(edges[cheapest[set2]]) > std::get<2>(edges[i]))
+                        cheapest[set2] = i;
+                }
+            }
+            for (int i=0; i<V; i++)
+            {
+                // Check if cheapest for current set exists
+                if (cheapest[i] != -1)
+                {
+                    int set1 = subsets.find(std::get<0>(edges[cheapest[i]]));
+                    int set2 = subsets.find(std::get<1>(edges[cheapest[i]]));
+                    if (set1 == set2)
+                        continue;
+                    //MSTweight += std::get<2>(edge[cheapest[i]]);
+                    result[index++] = edges[cheapest[i]];
+                    subsets.unite(set1,set2);
+                    numTrees--;
+                }
+            }
+
+        }
+        return std::make_pair(result,V);
+	}
     virtual ~AdjLists () {}
 
     Lists data;
-    bool is_directed;
 };
 
 typedef std::unordered_multimap<int,std::pair<int,int>> Edges;
@@ -166,6 +451,24 @@ class ListOfEdges : public View
 public:
 
     ListOfEdges() : View('E') {}
+    ListOfEdges(const std::pair<SpainingTree,int> &set) : View('E')
+    {
+        NTops = set.second;
+        auto edges = set.first;
+        auto Size = edges.size();
+        is_directed = false;
+        is_weighted = true;
+        data = Edges();
+        for(std::size_t i = 0; i<Size; i++)
+        {
+            int from,to,w;
+            std::tie(from,to,w) = edges[i];
+            data.insert(std::make_pair(from,std::make_pair(to,w)));
+            if(!is_directed)
+                data.insert(std::make_pair(to,std::make_pair(from,w)));
+        }
+	}
+
     virtual void Fill(std::ifstream &in)
     {
         std::size_t Size;
@@ -250,6 +553,142 @@ public:
         }
         return oldWeight;
     }
+        virtual std::pair<SpainingTree,int> getSpainingTreePrima()
+    {
+        std::vector<int> parent(NTops);
+        std::vector<int> key(NTops,std::numeric_limits<int>::max());
+        std::vector<bool> mstSet(NTops,false);
+
+        key[0] = 0;
+        parent[0] = -1;
+
+        for (std::size_t count = 0; count < NTops; count++)
+        {
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            auto range = data.equal_range(u);
+            for (auto it = range.first; it != range.second; ++it)
+            {
+                auto v = it->second.first;
+                auto w = it->second.second;
+                if (mstSet[v] == false && w <  key[v])
+                {
+                    parent[v]  = u, key[v] = w;
+				}
+            }
+        }
+        SpainingTree R(NTops-1);
+        for (std::size_t i = 1; i < NTops; i++)
+        {
+            auto range = data.equal_range(i);
+            for (auto it = range.first; it != range.second; ++it)
+            {
+                if(it->second.first == parent[i])
+                {
+                    R[i-1] = std::make_tuple(i,parent[i], it->second.second);
+                    break;
+                }
+            }
+
+		}
+		return std::make_pair(R,NTops);
+    }
+    std::pair<SpainingTree,int> getSpainingTreeKruscal()
+    {
+        int V = data.size();
+        SpainingTree result;
+
+        SpainingTree SortedEdges(V);
+        std::size_t j = 0;
+        for(const auto &el : data)
+            SortedEdges[j++] =
+                std::make_tuple(el.first,el.second.first,el.second.second);
+
+        std::sort(SortedEdges.begin(),SortedEdges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+
+        DSU subsets = DSU(V);
+
+
+        for(const auto &el : SortedEdges)
+        {
+            int x = subsets.find(std::get<0>(el));
+            int y = subsets.find(std::get<1>(el));
+
+            if (x != y)
+            {
+                result.push_back(el);
+                subsets.unite(x, y);
+            }
+        }
+        return std::make_pair(result,NTops);
+    }
+
+    std::pair<SpainingTree,int> getSpainingTreeBoruvka()
+    {
+        int E = data.size();
+        SpainingTree edges(E);
+        std::size_t j = 0;
+        SpainingTree result(NTops-1);
+        for(const auto &el : data)
+            edges[j++] =
+                std::make_tuple(el.first,el.second.first,el.second.second);
+
+        std::sort(edges.begin(),edges.end(),
+                  [](EdgeTuple &a,EdgeTuple &b)
+        {
+            return std::get<2>(a)<std::get<2>(b);
+        });
+
+        DSU subsets = DSU(NTops);
+
+        int numTrees = NTops;
+        auto index = 0;
+
+        for (std::size_t t = 1; t < NTops && numTrees > 1; t = t + t)
+        {
+            std::vector<int> cheapest(NTops,-1);
+            for (int i=0; i<E; i++)
+            {
+                int set1 = subsets.find(std::get<0>(edges[i]));
+                int set2 = subsets.find(std::get<1>(edges[i]));
+                if (set1 == set2)
+                    continue;
+
+                else
+                {
+                    if (cheapest[set1] == -1 ||
+                            std::get<2>(edges[cheapest[set1]]) > std::get<2>(edges[i]))
+                        cheapest[set1] = i;
+
+                    if (cheapest[set2] == -1 ||
+                            std::get<2>(edges[cheapest[set2]]) > std::get<2>(edges[i]))
+                        cheapest[set2] = i;
+                }
+            }
+            for (std::size_t i=0; i<NTops; i++)
+            {
+                // Check if cheapest for current set exists
+                if (cheapest[i] != -1)
+                {
+                    int set1 = subsets.find(std::get<0>(edges[cheapest[i]]));
+                    int set2 = subsets.find(std::get<1>(edges[cheapest[i]]));
+                    if (set1 == set2)
+                        continue;
+                    //MSTweight += std::get<2>(edge[cheapest[i]]);
+                    result[index++] = edges[cheapest[i]];
+                    subsets.unite(set1,set2);
+                    numTrees--;
+                }
+            }
+
+        }
+        return std::make_pair(result,NTops);
+    }
+
     virtual ~ListOfEdges () {}
 
     Edges data;
@@ -279,6 +718,7 @@ struct TransformView
         auto Size = lists->data.size();
         R->data = Matrix(Size,IntVec(Size,0));
         R->is_weighted = lists->is_weighted;
+        R->is_directed = lists->is_directed;
         for(std::size_t i = 0; i<Size; i++)
         {
             for(const auto &el : lists->data[i])
@@ -295,6 +735,7 @@ struct TransformView
         auto Size = lists->NTops;
         R->data = Matrix(Size,IntVec(Size,0));
         R->is_weighted = lists->is_weighted;
+        R->is_directed = lists->is_directed;
 
         for(const auto &el : lists->data)
             if(lists->is_weighted)
@@ -310,7 +751,8 @@ struct TransformView
         auto Size = matrix->data.size();
         R->data = Lists(Size,List());
         R->is_weighted = matrix->is_weighted;
-        bool flag=true;
+        R->is_directed = matrix->is_directed;
+
         for(std::size_t i = 0; i<Size; i++)
         {
             for(std::size_t j = 0; j<Size; j++)
@@ -318,11 +760,8 @@ struct TransformView
                 auto el = matrix->data[i][j];
                 if(el)
                     R->data[i][j]=el;
-                if(flag && el!=matrix->data[j][i])
-                    flag = false;
             }
         }
-        R->is_directed = flag;
         return R;
     };
     static AdjLists* AListFromEList(const ListOfEdges *lists)
@@ -346,8 +785,8 @@ struct TransformView
         auto Size = matrix->data.size();
         R->data = Edges();
         R->is_weighted = matrix->is_weighted;
+        R->is_directed = matrix->is_directed;
         R->NTops = Size;
-        bool flag=true;
         for(std::size_t i = 0; i<Size; i++)
         {
             for(std::size_t j = 0; j<Size; j++)
@@ -356,11 +795,8 @@ struct TransformView
                 if(el)
                     R->data.insert(std::make_pair(i,
                                                   std::make_pair(j,el)));
-                if(flag && el!=matrix->data[j][i])
-                    flag = false;
             }
         }
-        R->is_directed = flag;
         return R;
     };
     static ListOfEdges* EListFromLists(const AdjLists *lists)
@@ -386,8 +822,8 @@ struct TransformView
         }
         return R;
     };
-
 };
+
 
 class Graph
 {
@@ -430,7 +866,6 @@ public:
     }
     void transformToAdjList()
     {
-
         if(data->type=='C')
         {
             View* update = TransformView::AListFromMatrix(dynamic_cast<AdjMatrix*>(data));
@@ -495,6 +930,74 @@ public:
 
         out<<data->type<<' ';
         data->Write(out);
+    }
+
+    Graph getSpainingTreePrima() const
+    {
+        std::pair<SpainingTree,int> R;
+        //матрица
+        if(data->type=='C')
+        {
+            R = data->getSpainingTreePrima();
+        }
+        //списки смежности
+        else if(data->type=='L')
+        {
+            R = data->getSpainingTreePrima();
+        }
+        //списки ребер
+        else if(data->type=='E')
+        {
+            R = data->getSpainingTreePrima();
+        }
+        Graph g;
+        g.data = new ListOfEdges(R);
+        return g;
+    }
+    Graph getSpainingTreeKruscal() const
+    {
+        std::pair<SpainingTree,int> R;
+        //матрица
+        if(data->type=='C')
+        {
+            R = data->getSpainingTreeKruscal();
+        }
+        //списки смежности
+        else if(data->type=='L')
+        {
+            R = data->getSpainingTreeKruscal();
+        }
+        //списки ребер
+        else if(data->type=='E')
+        {
+            R = data->getSpainingTreeKruscal();
+        }
+        Graph g;
+        g.data = new ListOfEdges(R);
+        return g;
+    }
+
+    Graph getSpainingTreeBoruvka() const
+    {
+        std::pair<SpainingTree,int> R;
+        //матрица
+        if(data->type=='C')
+        {
+            R = data->getSpainingTreeBoruvka();
+        }
+        //списки смежности
+        else if(data->type=='L')
+        {
+            R = data->getSpainingTreeBoruvka();
+        }
+        //списки ребер
+        else if(data->type=='E')
+        {
+            R = data->getSpainingTreeBoruvka();
+        }
+        Graph g;
+        g.data = new ListOfEdges(R);
+        return g;
     }
 
     ~Graph()
