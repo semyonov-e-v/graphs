@@ -6,6 +6,7 @@
 #include <string>
 #include <iterator>
 #include <sstream>
+#include <iostream>
 #include <cstdio>
 #include <limits>
 #include <algorithm>
@@ -269,7 +270,7 @@ public:
             auto vec = Split(str);
             for(std::size_t j = 0; j<vec.size(); j++)
             {
-                key = vec[j];
+                key = vec[j]-1;
                 if(is_weighted)
                 {
                     data[i][key] = vec[++j];
@@ -288,9 +289,9 @@ public:
         {
             for(const auto &el : data[i])
                 if(is_weighted)
-                    out<<el.first<<' '<<el.second<<' ';
+                    out<<el.first+1<<' '<<el.second<<' ';
                 else
-                    out<<el.first<<' ';
+                    out<<el.first+1<<' ';
             out<<'\n';
         }
     }
@@ -464,8 +465,6 @@ public:
             int from,to,w;
             std::tie(from,to,w) = edges[i];
             data.insert(std::make_pair(from,std::make_pair(to,w)));
-            if(!is_directed)
-                data.insert(std::make_pair(to,std::make_pair(from,w)));
         }
 	}
 
@@ -483,6 +482,8 @@ public:
             int to;
             in>>from;
             in>>to;
+            from--;
+            to--;
             if(is_weighted)
             {
                 int w;
@@ -503,9 +504,9 @@ public:
         {
             auto value = el.second;
             if(is_weighted)
-                out<<el.first<<' '<<value.first<<' '<<value.second;
+                out<<el.first+1<<' '<<value.first+1<<' '<<value.second;
             else
-                out<<el.first<<' '<<value.first;
+                out<<el.first+1<<' '<<value.first+1;
             out<<'\n';
         }
     }
@@ -561,12 +562,23 @@ public:
 
         key[0] = 0;
         parent[0] = -1;
+        Edges copy = data;
+
+        for(const auto &el : data)
+        {
+			auto from = el.first;
+			auto to = el.second.first;
+			auto w = el.second.second;
+			copy.insert(
+                std::make_pair(to,std::make_pair(from,w)));
+		}
+
 
         for (std::size_t count = 0; count < NTops; count++)
         {
             int u = minKey(key, mstSet);
             mstSet[u] = true;
-            auto range = data.equal_range(u);
+            auto range = copy.equal_range(u);
             for (auto it = range.first; it != range.second; ++it)
             {
                 auto v = it->second.first;
@@ -580,7 +592,7 @@ public:
         SpainingTree R(NTops-1);
         for (std::size_t i = 1; i < NTops; i++)
         {
-            auto range = data.equal_range(i);
+            auto range = copy.equal_range(i);
             for (auto it = range.first; it != range.second; ++it)
             {
                 if(it->second.first == parent[i])
@@ -733,16 +745,25 @@ struct TransformView
     {
         auto R = new AdjMatrix();
         auto Size = lists->NTops;
+
         R->data = Matrix(Size,IntVec(Size,0));
         R->is_weighted = lists->is_weighted;
         R->is_directed = lists->is_directed;
 
         for(const auto &el : lists->data)
+        {
             if(lists->is_weighted)
                 R->data[el.first][el.second.first]=el.second.second;
             else
                 R->data[el.first][el.second.first]=1;
-
+            if(!lists->is_directed)
+            {
+            if(lists->is_weighted)
+                R->data[el.second.first][el.first]=el.second.second;
+            else
+                R->data[el.second.first][el.first]=1;
+			}
+		}
         return R;
     };
     static AdjLists* AListFromMatrix(const AdjMatrix *matrix)
@@ -773,10 +794,20 @@ struct TransformView
         R->is_directed = lists->is_directed;
 
         for(const auto &el : lists->data)
+        {
             if(lists->is_weighted)
                 R->data[el.first][el.second.first]=el.second.second;
             else
                 R->data[el.first][el.second.first]=1;
+
+            if(!lists->is_directed)
+            {
+            if(lists->is_weighted)
+                R->data[el.second.first][el.first]=el.second.second;
+            else
+                R->data[el.second.first][el.first]=1;
+			}
+		}
         return R;
     };
     static ListOfEdges* EListFromMatrix(const AdjMatrix *matrix)
@@ -787,14 +818,27 @@ struct TransformView
         R->is_weighted = matrix->is_weighted;
         R->is_directed = matrix->is_directed;
         R->NTops = Size;
+
         for(std::size_t i = 0; i<Size; i++)
         {
-            for(std::size_t j = 0; j<Size; j++)
+            for(std::size_t j = i+1; j<Size; j++)
             {
                 auto el = matrix->data[i][j];
                 if(el)
                     R->data.insert(std::make_pair(i,
                                                   std::make_pair(j,el)));
+            }
+        }
+        if(!R->is_directed)
+            return R;
+        for(std::size_t i = 0; i<Size; i++)
+        {
+            for(std::size_t j = i+1; j<Size; j++)
+            {
+                auto el = matrix->data[j][i];
+                if(el)
+                    R->data.insert(std::make_pair(j,
+                                                  std::make_pair(i,el)));
             }
         }
         return R;
