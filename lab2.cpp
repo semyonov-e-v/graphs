@@ -15,7 +15,7 @@ int main()
     test.getSpainingTreeKruscal().writeGraph("AdjListKruscal.txt");
     test.getSpainingTreePrima().writeGraph("AdjListPrima2.txt");
 
-        test.transformToAdjMatrix();
+    test.transformToAdjMatrix();
     test.getSpainingTreePrima().writeGraph("MatrixPrima.txt");
     test.getSpainingTreeKruscal().writeGraph("MatrixCruscal.txt");
     test.getSpainingTreeBoruvka().writeGraph("MatrixBoruvka.txt");
