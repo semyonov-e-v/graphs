@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <limits>
 #include <algorithm>
-#include <set>
 
 #include "DSU.h"
 
@@ -112,48 +111,37 @@ public:
     }
     virtual std::pair<SpainingTree,int> getSpainingTreePrima()
     {
-        int V = data.size();
-        std::vector<int> key(V,std::numeric_limits<int>::max());
-        std::vector<int> mstSet(V,-1);
+		int NTops = data.size();
+        std::vector<int> parent(NTops);
+        std::vector<int> key(NTops,std::numeric_limits<int>::max());
+        std::vector<bool> mstSet(NTops,false);
 
-        SpainingTree R(V-1);
-        std::set<std::pair<int,int>> q;
-        q.insert (std::make_pair (0, 0));
-        std::vector<bool> used(V,false);
-        for (int i=0; i<V; ++i)
+        key[0] = 0;
+        parent[0] = -1;
+
+        for (int count = 0; count < NTops-1; count++)
         {
-            if (q.empty())
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            for (int v = 0; v<NTops; v++)
             {
-                std::cout << "No MST!";
-                exit(0);
-            }
-            int v = q.begin()->second;
-
-            q.erase (q.begin());
-
-            if (mstSet[v] != -1)
-                used[v] = true;
-
-            for (int j=0; j<V; ++j)
-            {
-                int cost = data[v][j];
-                if (cost && !used[j] &&  cost < key[j])
+                if (data[u][v] && mstSet[v] == false && data[u][v] < key[v])
                 {
-                    q.erase (std::make_pair(key[j], j));
-                    key[j] = cost;
-                    mstSet[j] = v;
-                    q.insert (std::make_pair (key[j], j));
+                    parent[v] = u;
+                    key[v] = data[u][v];
                 }
             }
         }
-
-        for (int i = 1; i < V; i++)
-            R[i-1] = std::make_tuple(i, mstSet[i], key[i]);
-        return std::make_pair(R,V);
+        SpainingTree R(NTops-1);
+        for (int i = 1; i < NTops; i++)
+        {
+		    R[i-1] = std::make_tuple(parent[i], i, data[i][parent[i]]);
+		}
+		return std::make_pair(R,NTops);
     }
 
-    virtual std::pair<SpainingTree,int> getSpainingTreeKruscal()
-    {
+virtual std::pair<SpainingTree,int> getSpainingTreeKruscal()
+{
         SpainingTree SortedEdges;
         int V = data.size();
         for(int i = 0; i<V; i++)
@@ -188,10 +176,10 @@ public:
         }
 
         return std::make_pair(result,V);
-    }
-    virtual std::pair<SpainingTree,int> getSpainingTreeBoruvka()
-    {
-        SpainingTree edges;
+}
+virtual std::pair<SpainingTree,int> getSpainingTreeBoruvka()
+{
+	    SpainingTree edges;
         int V = data.size();
         for(int i = 0; i<V; i++)
         {
@@ -209,7 +197,7 @@ public:
         {
             return std::get<2>(a)<std::get<2>(b);
         });
-        DSU subsets = DSU(V);
+	    DSU subsets = DSU(V);
 
         int numTrees = V;
         auto index = 0;
@@ -253,10 +241,10 @@ public:
 
         }
         return std::make_pair(result,V);
-    }
-    virtual ~AdjMatrix () {}
+}
+virtual ~AdjMatrix () {}
 
-    Matrix data;
+Matrix data;
 };
 typedef std::unordered_map<int,int> List;
 typedef std::vector<List> Lists;
@@ -331,55 +319,42 @@ public:
     std::pair<SpainingTree,int> getSpainingTreePrima()
     {
         int V = data.size();
+
+        std::vector<int> parent(V);
         std::vector<int> key(V,std::numeric_limits<int>::max());
-        std::vector<int> mstSet(V,-1);
+        std::vector<bool> mstSet(V,false);
 
-        SpainingTree R(V-1);
-        std::set<std::pair<int,int>> q;
-        q.insert (std::make_pair (0, 0));
-        std::vector<bool> used(V,false);
-        for (int i=0; i<V; ++i)
+        key[0] = 0;
+        parent[0] = -1;
+
+        for (int count = 0; count < V-1; count++)
         {
-            if (q.empty())
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            for (const auto &el : data[u])
             {
-                std::cout << "No MST!";
-                exit(0);
-            }
-            int v = q.begin()->second;
-
-            q.erase (q.begin());
-
-            if (mstSet[v] != -1)
-                used[v] = true;
-
-            for (const auto &el : data[v])
-            {
-                int to = el.first;
-                int cost = el.second;
-                if (!used[to] &&  cost < key[to])
-                {
-                    q.erase (std::make_pair(key[to], to));
-                    key[to] = cost;
-                    mstSet[to] = v;
-                    q.insert (std::make_pair (key[to], to));
-                }
+                auto v = el.first;
+                auto w = el.second;
+                if (mstSet[v] == false && w <  key[v])
+                    parent[v]  = u, key[v] = w;
             }
         }
-
+        SpainingTree R(V-1);
         for (int i = 1; i < V; i++)
-            R[i-1] = std::make_tuple(i, mstSet[i], key[i]);
-
-        return std::make_pair(R,V);
+        {
+		    R[i-1] = std::make_tuple(parent[i], (int)i, data[i][parent[i]]);
+		}
+		return std::make_pair(R,V);
     }
     std::pair<SpainingTree,int> getSpainingTreeKruscal()
     {
-        SpainingTree SortedEdges;
+	    SpainingTree SortedEdges;
         int V = data.size();
         for(int i = 0; i<V; i++)
         {
             for(const auto &el : data[i])
                 SortedEdges.push_back(std::make_tuple(i,el.first,el.second));
-        }
+		}
 
         SpainingTree result(V-1);
         std::sort(SortedEdges.begin(),SortedEdges.end(),
@@ -403,16 +378,16 @@ public:
         }
 
         return std::make_pair(result,V);
-    }
+	}
     std::pair<SpainingTree,int> getSpainingTreeBoruvka()
     {
-        SpainingTree edges;
+	    SpainingTree edges;
         int V = data.size();
         for(int i = 0; i<V; i++)
         {
             for(const auto &el : data[i])
                 edges.push_back(std::make_tuple(i,el.first,el.second));
-        }
+		}
 
         SpainingTree result(V-1);
         std::sort(edges.begin(),edges.end(),
@@ -420,7 +395,7 @@ public:
         {
             return std::get<2>(a)<std::get<2>(b);
         });
-        DSU subsets = DSU(V);
+	    DSU subsets = DSU(V);
 
         int numTrees = V;
         auto index = 0;
@@ -464,7 +439,7 @@ public:
 
         }
         return std::make_pair(result,V);
-    }
+	}
     virtual ~AdjLists () {}
 
     Lists data;
@@ -491,7 +466,7 @@ public:
             std::tie(from,to,w) = edges[i];
             data.insert(std::make_pair(from,std::make_pair(to,w)));
         }
-    }
+	}
 
     virtual void Fill(std::ifstream &in)
     {
@@ -579,59 +554,56 @@ public:
         }
         return oldWeight;
     }
-    virtual std::pair<SpainingTree,int> getSpainingTreePrima()
+        virtual std::pair<SpainingTree,int> getSpainingTreePrima()
     {
-        int V = NTops;
-        std::vector<int> key(V,std::numeric_limits<int>::max());
-        std::vector<int> mstSet(V,-1);
+        std::vector<int> parent(NTops);
+        std::vector<int> key(NTops,std::numeric_limits<int>::max());
+        std::vector<bool> mstSet(NTops,false);
 
-        SpainingTree R(V-1);
-        std::set<std::pair<int,int>> q;
-        q.insert (std::make_pair (0, 0));
-        std::vector<bool> used(V,false);
-        auto copy = data;
+        key[0] = 0;
+        parent[0] = -1;
+        Edges copy = data;
+
         for(const auto &el : data)
         {
-            auto from = el.first;
-            auto to = el.second.first;
-            auto w = el.second.second;
-            copy.insert(
+			auto from = el.first;
+			auto to = el.second.first;
+			auto w = el.second.second;
+			copy.insert(
                 std::make_pair(to,std::make_pair(from,w)));
-        }
+		}
 
-        for (int i=0; i<V; ++i)
+
+        for (std::size_t count = 0; count < NTops; count++)
         {
-            if (q.empty())
-            {
-                std::cout << "No MST!";
-                exit(0);
-            }
-            int v = q.begin()->second;
-
-            q.erase (q.begin());
-
-            if (mstSet[v] != -1)
-                used[v] = true;
-
-            auto range = copy.equal_range(v);
+            int u = minKey(key, mstSet);
+            mstSet[u] = true;
+            auto range = copy.equal_range(u);
             for (auto it = range.first; it != range.second; ++it)
             {
-                auto j = it->second.first;
+                auto v = it->second.first;
                 auto w = it->second.second;
-                if (!used[j] && w <  key[j])
+                if (mstSet[v] == false && w <  key[v])
                 {
-                    q.erase (std::make_pair(key[j], j));
-                    key[j] = w;
-                    mstSet[j] = v;
-                    q.insert (std::make_pair (key[j], j));
-                }
+                    parent[v]  = u, key[v] = w;
+				}
             }
         }
+        SpainingTree R(NTops-1);
+        for (std::size_t i = 1; i < NTops; i++)
+        {
+            auto range = copy.equal_range(i);
+            for (auto it = range.first; it != range.second; ++it)
+            {
+                if(it->second.first == parent[i])
+                {
+                    R[i-1] = std::make_tuple(i,parent[i], it->second.second);
+                    break;
+                }
+            }
 
-        for (int i = 1; i < V; i++)
-            R[i-1] = std::make_tuple(i, mstSet[i], key[i]);
-
-        return std::make_pair(R,V);
+		}
+		return std::make_pair(R,NTops);
     }
     std::pair<SpainingTree,int> getSpainingTreeKruscal()
     {
@@ -786,12 +758,12 @@ struct TransformView
                 R->data[el.first][el.second.first]=1;
             if(!lists->is_directed)
             {
-                if(lists->is_weighted)
-                    R->data[el.second.first][el.first]=el.second.second;
-                else
-                    R->data[el.second.first][el.first]=1;
-            }
-        }
+            if(lists->is_weighted)
+                R->data[el.second.first][el.first]=el.second.second;
+            else
+                R->data[el.second.first][el.first]=1;
+			}
+		}
         return R;
     };
     static AdjLists* AListFromMatrix(const AdjMatrix *matrix)
@@ -830,12 +802,12 @@ struct TransformView
 
             if(!lists->is_directed)
             {
-                if(lists->is_weighted)
-                    R->data[el.second.first][el.first]=el.second.second;
-                else
-                    R->data[el.second.first][el.first]=1;
-            }
-        }
+            if(lists->is_weighted)
+                R->data[el.second.first][el.first]=el.second.second;
+            else
+                R->data[el.second.first][el.first]=1;
+			}
+		}
         return R;
     };
     static ListOfEdges* EListFromMatrix(const AdjMatrix *matrix)
