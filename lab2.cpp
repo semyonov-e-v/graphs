@@ -4,7 +4,7 @@
 int main()
 {
     Graph test;
-    test.readGraph("new_.txt");
+    test.readGraph("lab2.txt");
 
     test.getSpainingTreePrima().writeGraph("EdgeListPrima.txt");
     test.getSpainingTreeKruscal().writeGraph("EdgeListKruscal.txt");

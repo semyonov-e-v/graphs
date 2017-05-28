@@ -11,6 +11,7 @@
 #include <limits>
 #include <algorithm>
 #include <set>
+#include <stack>
 
 #include "DSU.h"
 
@@ -38,7 +39,6 @@ int minKey (const std::vector<int> &key,
     return min_index;
 }
 
-//
 class View
 {
 public:
@@ -51,7 +51,9 @@ public:
     virtual std::pair<SpainingTree,int> getSpainingTreePrima() =0;
     virtual std::pair<SpainingTree,int> getSpainingTreeKruscal() =0;
     virtual std::pair<SpainingTree,int> getSpainingTreeBoruvka() =0;
-
+    virtual int CheckEuler(bool &circleExist) =0;
+    virtual std::vector<int> getEuleranTourEffective() =0;
+    virtual std::vector<int> getEuleranTourFleri() =0;
     virtual ~View () {}
 
     bool is_weighted;
@@ -255,9 +257,151 @@ public:
         }
         return std::make_pair(result,V);
     }
+    int CheckEuler(bool &circleExist)
+    {
+        //проверка на 2-ой критерий
+        int NTops = data.size();
+        std::vector<int> parent(NTops,-1);
+        circleExist = false;
+        for(int i=0; i<NTops; i++)
+            for(int j=0; j<NTops; j++)
+            {
+                if(!data[i][j])
+                    continue;
+                int x = DSU::find(parent, i);
+                int y = DSU::find(parent, j);
+
+                if (x == y)
+                {
+                    circleExist = true;
+                    break;
+                }
+
+                DSU::Union(parent, x, y);
+            }
+        if(!circleExist)
+            return 0;
+
+        int count = 0,top = 1;
+
+        for(int i=0; i<NTops; i++)
+        {
+            auto temp = NTops-std::count(data[i].cbegin(),data[i].cend(),0);
+            if(temp%2!=0)
+            {
+                top = i+1;
+                count++;
+            }
+        }
+        if(count>2)
+            return 0;
+        else if(count == 0)
+            circleExist = true;
+        else
+            circleExist = false;
+
+        return top;
+    }
+    std::vector<int> getEuleranTourFleri()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R;
+        R.reserve(2*data.size());
+        auto copy = data;
+        R.push_back(v+1);
+        proc(v,copy,R);
+        return R;
+    }
+    std::vector<int> getEuleranTourEffective()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R;
+        R.reserve(2*data.size());
+        auto copy = data;
+        std::stack<int> S;
+        S.push(v);
+        int Size = data.size();
+        while (!S.empty())
+        {
+            auto w = S.top();
+            for(int u=0; u<Size; u++)
+                if(copy[w][u])
+                {
+                    S.push(u);
+                    copy[w][u]=0;
+                    if(!is_directed)
+                        copy[u][w]=0;
+                    break;
+                }
+
+            if(w==S.top())
+            {
+                S.pop();
+                R.push_back(w+1);
+            }
+        }
+        return R;
+    }
     virtual ~AdjMatrix () {}
 
     Matrix data;
+
+private:
+
+    int DFSCount (int v, std::vector<bool> &visited,
+                  const Matrix &copy)
+    {
+        visited[v] = true;
+        int count = 1;
+
+        for(auto j=0; j<int(copy.size()); j++)
+            if (!visited[j])
+                count += DFSCount(j, visited,copy);
+        return count;
+    }
+    bool isValidNextEdge(int u, int v,Matrix &copy)
+    {
+
+        if((copy.size()-std::count(data[u].cbegin(),data[u].cend(),0))==1)
+            return true;
+
+        std::vector<bool> visited(copy.size(),false);
+        int count1 = DFSCount(u, visited,copy);
+
+        copy[u][v] = 0;
+        if(!is_directed)
+            copy[v][u] = 0;
+
+        std::fill(visited.begin(),visited.end(),false);
+        int count2 = DFSCount(u, visited,copy);
+        copy[u][v] = 1;
+        if(!is_directed)
+            copy[v][u] = 1;
+
+        return (count1 > count2)? false: true;
+    }
+    void proc (int u,Matrix &copy,std::vector<int> &R)
+    {
+        for(auto v=0; v<int(copy.size()); v++)
+        {
+            if(copy[u][v] && isValidNextEdge(u, v,copy) )
+            {
+                R.push_back(v+1);
+                copy[u][v] = 0;
+                if(!is_directed)
+                    copy[v][u] = 0;
+                proc(v,copy,R);
+            }
+        }
+    }
 };
 typedef std::unordered_map<int,int> List;
 typedef std::vector<List> Lists;
@@ -466,9 +610,146 @@ public:
         }
         return std::make_pair(result,V);
     }
+    int CheckEuler(bool &circleExist)
+    {
+        //проверка на 2-ой критерий
+        int NTops = data.size();
+        std::vector<int> parent(NTops,-1);
+        circleExist = false;
+        for(int i=0; i<NTops; i++)
+            for(const auto &el : data[i])
+            {
+                int x = DSU::find(parent, i);
+                int y = DSU::find(parent, el.first);
+
+                if (x == y)
+                {
+                    circleExist = true;
+                    break;
+                }
+                DSU::Union(parent, x, y);
+            }
+        if(!circleExist)
+            return 0;
+
+        int count = 0,top = 1;
+        for(int i=0; i<NTops; i++)
+        {
+            if(data[i].size()%2!=0)
+            {
+                top = i+1;
+                count++;
+            }
+        }
+        if(count>2)
+            return 0;
+        else if(count == 0)
+            circleExist = true;
+        else
+            circleExist = false;
+
+        return top;
+    }
+    std::vector<int> getEuleranTourEffective()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R;
+        R.reserve(2*data.size());
+        auto copy = data;
+        std::stack<int> S;
+        S.push(v);
+        while (!S.empty())
+        {
+            auto w = S.top();
+            auto map = copy[w];
+            if(!map.empty())
+            {
+                auto u = map.begin()->first;
+                S.push(u);
+                copy[w].erase(u);
+                if(!is_directed)
+                    copy[u].erase(w);
+            }
+
+            if(w==S.top())
+            {
+                S.pop();
+                R.push_back(w+1);
+            }
+        }
+        return R;
+    }
+    std::vector<int> getEuleranTourFleri()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R;
+        R.reserve(2*data.size());
+        auto copy = data;
+        R.push_back(v+1);
+        proc(v,copy,R);
+        return R;
+    }
+
     virtual ~AdjLists () {}
 
     Lists data;
+
+private:
+    int DFSCount (int v, std::vector<bool> &visited,
+                  const Lists &copy)
+    {
+        visited[v] = true;
+        int count = 1;
+
+        for (auto it = copy[v].begin(); it != copy[v].end(); ++it)
+            if (!visited[it->first])
+                count += DFSCount(it->first, visited,copy);
+        return count;
+    }
+    bool isValidNextEdge(int u, int v,Lists &copy)
+    {
+        if(copy[u].size()==1)
+            return true;
+
+        std::vector<bool> visited(copy.size(),false);
+        int count1 = DFSCount(u, visited,copy);
+
+        copy[u][v] = 0;
+        if(!is_directed)
+            copy[v][u] = 0;
+
+        std::fill(visited.begin(),visited.end(),false);
+        int count2 = DFSCount(u, visited,copy);
+        copy[u][v] = 1;
+        if(!is_directed)
+            copy[v][u] = 1;
+
+        return (count1 > count2)? false: true;
+    }
+    void proc (int u,Lists &copy,std::vector<int> &R)
+    {
+        for(const auto &el : copy[u])
+        {
+            auto v = el.first;
+            auto t = el.second;
+            if(t && isValidNextEdge(u, v,copy) )
+            {
+                R.push_back(v+1);
+                copy[u][v] = 0;
+                if(!is_directed)
+                    copy[v][u] = 0;
+                proc(v,copy,R);
+            }
+        }
+    }
 };
 
 typedef std::unordered_multimap<int,std::pair<int,int>> Edges;
@@ -729,7 +1010,115 @@ public:
         }
         return std::make_pair(result,NTops);
     }
+    int CheckEuler(bool &circleExist)
+    {
+        //проверка на 2-ой критерий
+        std::vector<int> parent(NTops,-1);
+        circleExist = false;
+        for(const auto &el : data)
+        {
+            int x = DSU::find(parent,el.first);
+            int y = DSU::find(parent, el.second.first);
 
+            if (x == y)
+            {
+                circleExist = true;
+                break;
+            }
+
+            DSU::Union(parent, x, y);
+        }
+        if(!circleExist)
+            return 0;
+        auto copy = data;
+        for(const auto &el : data)
+        {
+            auto from = el.first;
+            auto to = el.second.first;
+            auto w = el.second.second;
+            copy.insert(
+                std::make_pair(to,std::make_pair(from,w)));
+        }
+        int count = 0,top = 1;
+        for(int i =0; i<int(NTops); i++)
+        {
+            if(copy.count(i)%2!=0)
+            {
+                top = i+1;
+                count++;
+            }
+        }
+        if(count>2)
+            return 0;
+        else if(count == 0)
+            circleExist = true;
+        else
+            circleExist = false;
+
+        return top;
+    }
+    std::vector<int> getEuleranTourFleri()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R(data.size()+1);
+        auto copy = data;
+        for(const auto &el : data)
+        {
+            auto from = el.first;
+            auto to = el.second.first;
+            auto w = el.second.second;
+            copy.insert(
+                std::make_pair(to,std::make_pair(from,w)));
+        }
+        R[0] = v+1;
+        proc(v,copy,R);
+        return R;
+    }
+    std::vector<int> getEuleranTourEffective()
+    {
+        bool is_circle;
+        auto v = CheckEuler(is_circle);
+        if(!v)
+            return std::vector<int> {};
+        v--;
+        std::vector<int> R(data.size()+1,0);
+        auto copy = data;
+        for(const auto &el : data)
+        {
+            auto from = el.first;
+            auto to = el.second.first;
+            auto w = el.second.second;
+            copy.insert(
+                std::make_pair(to,std::make_pair(from,w)));
+        }
+        std::stack<int> S;
+        S.push(v);
+        std::size_t count = 0;
+        while (!S.empty())
+        {
+            auto w = S.top();
+            auto it = copy.find(w);
+            if(it != copy.cend())
+            {
+                auto u = it->second.first;
+                S.push(u);
+                erase(copy,w,u);
+                if(!is_directed)
+                    erase(copy,u,w);
+            }
+
+            if(w==S.top())
+            {
+                S.pop();
+                R[count++]=w+1;
+            }
+        }
+        return R;
+    }
     virtual ~ListOfEdges () {}
 
     Edges data;
@@ -740,15 +1129,99 @@ private:
 
     void erase(int from,int to)
     {
-        auto range = data.equal_range(from);
+        erase(data,from,to);
+    }
+    void erase(Edges &d, int from,int to)
+    {
+        auto range = d.equal_range(from);
         for (auto it = range.first; it != range.second;)
         {
             if (it->second.first == to)
-                it = data.erase(it);
+                it = d.erase(it);
             else
                 ++it;
         }
     }
+
+    int DFSCount (int v, std::vector<bool> &visited,
+                  const Edges &copy)
+    {
+        visited[v] = true;
+        int count = 1;
+
+        auto range = copy.equal_range(v);
+        for (auto it = range.first; it != range.second; it++)
+        {
+            auto j = it->first;
+            if (!visited[j])
+                count += DFSCount(j, visited,copy);
+        }
+        return count;
+    }
+    bool isValidNextEdge(int u, int v,Edges &copy)
+    {
+        int count1 = 0;
+        auto range = copy.equal_range(u);
+        for (auto it = range.first; it != range.second; it++)
+            if (it->second.second)
+                count1++;
+
+        if(count1==1)
+            return true;
+
+        std::vector<bool> visited(copy.size(),false);
+        count1 = DFSCount(u, visited,copy);
+
+        auto r = copy.equal_range(v);
+        for (auto it = range.first; it != range.second; it++)
+            if (it->second.first == v)
+                it->second.second = 0;
+        if(!is_directed)
+        {
+            for (auto it = r.first; it != r.second; it++)
+                if (it->second.first == u)
+                    it->second.second = 0;
+        }
+
+        std::fill(visited.begin(),visited.end(),false);
+        int count2 = DFSCount(u, visited,copy);
+        for (auto it = range.first; it != range.second; it++)
+            if (it->second.first == v)
+                it->second.second = 1;
+        if(!is_directed)
+        {
+            for (auto it = r.first; it != r.second; it++)
+                if (it->second.first == u)
+                    it->second.second = 1;
+        }
+
+        return (count1 > count2)? false: true;
+    }
+    void proc (int u,Edges &copy,std::vector<int> &R)
+    {
+        static int index = 0;
+        auto range = copy.equal_range(u);
+        for (auto it = range.first; it != range.second; it++)
+        {
+            auto v = it->second.first;
+            if(it->second.second && isValidNextEdge(u, v,copy) )
+            {
+                R[++index]=v+1;
+                it->second.second = 0;
+                if(!is_directed)
+                {
+                    auto r = copy.equal_range(v);
+                    for (auto z = r.first; z != r.second; z++)
+                        if (z->second.first == u)
+                            z->second.second = 0;
+
+                }
+                proc(v,copy,R);
+            }
+        }
+
+    }
+
 };
 
 struct TransformView
@@ -1072,7 +1545,18 @@ public:
         g.data = new ListOfEdges(R);
         return g;
     }
-
+    int CheckEuler(bool &circleExist)
+    {
+        return data->CheckEuler(circleExist);
+    }
+    std::vector<int> getEuleranTourFleri()
+    {
+        return data->getEuleranTourFleri();
+    }
+    std::vector<int> getEuleranTourEffective()
+    {
+        return data->getEuleranTourEffective();
+    }
     ~Graph()
     {
         delete data;
